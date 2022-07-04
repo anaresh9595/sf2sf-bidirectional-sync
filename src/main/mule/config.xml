@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	<salesforce:sfdc-config name="Salesforce_Config_sfdcA" doc:name="Salesforce Config" doc:id="44aef3b3-6f1f-42af-85e6-eb428e8d0788" >
+		<salesforce:basic-connection username="${sfdcA.username}" password="${secure::sfdcA.password}" securityToken="${secure::sfdcA.securityToken}" url="${sfdcA.url}" />
+	</salesforce:sfdc-config>
+		<salesforce:sfdc-config name="Salesforce_Config_sfdcB" doc:name="Salesforce Config" doc:id="6a8bf32a-a769-4339-a29e-784e039c048b" >
+		<salesforce:basic-connection username="${sfdcB.username}" password="${secure::sfdcB.password}" securityToken="${secure::sfdcB.securityToken}" url="${sfdcB.url}" />
+	</salesforce:sfdc-config>
+		<os:object-store name="Object_store_sfdcA_Contacts" doc:name="Object store" doc:id="afa3ebeb-162b-4aa4-b3ac-195434b55f7d" />
+	
+	<configuration-properties doc:name="Configuration properties" doc:id="0b132d6e-d4d9-42e0-b7c7-c92bfaf6e660" file="config/${mule.env}-properties.yaml" />
+	<global-property doc:name="Global Property" doc:id="8fd7e3d4-7cd7-4cba-868d-197dde475782" name="mule.env" value="dev" />
+	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="580e3fd5-461a-4967-8dc8-e8c29dfbf57b" file="config/${mule.env}-properties.yaml" key="${mule.key}" >
+		<secure-properties:encrypt algorithm="Blowfish" />
+	</secure-properties:config>
+	<global-property doc:name="Global Property" doc:id="056780cd-a1e2-4a77-a431-6b62c3721584" name="mule.key" value="mule123456789" />
+	<os:object-store name="Object_store_sfdcB_Contacts" doc:name="Object store" doc:id="aa164f40-2c0e-45ee-89db-f7a71095a5b9" />
+	<configuration doc:name="Configuration" doc:id="a0e25ffc-8f34-48fe-8182-1daca2845b18" defaultErrorHandler-ref="errorHandlingError_Handler" />
+</mule>

@@ -1,0 +1,16 @@
+%dw 2.0
+
+type auto_ba8d2f26_dc9a_4924_8611_c8a445a1da36_Input_Payload = Array<Contact>
+type Contact = {|
+  Email?: String {"typeId": "Email"}, 
+  FirstName?: String {"typeId": "FirstName"}, 
+  Id?: String {"typeId": "Id"}, 
+  LastModifiedDate?: DateTime {"typeId": "LastModifiedDate"}, 
+  LastName?: String {"typeId": "LastName"}, 
+  Name?: String {"typeId": "Name"}, 
+  Phone?: String {"typeId": "Phone"}, 
+  SFDC_B_Contact_Id__c?: String {"typeId": "SFDC_B_Contact_Id__c"}
+|} {"typeId": "Contact"}
+
+
+

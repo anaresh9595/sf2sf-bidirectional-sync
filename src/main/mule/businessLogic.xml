@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<flow name="sfdcA_To_sfdcB_Contacts_businessLogicFlow" doc:id="27b50001-57d1-4818-a95a-6e9760c1186c" >
+		<batch:job jobName="sfdcA_To_sfdcB_Contacts_businessLogicBatch_Job" doc:id="f4d04409-cd89-4024-9216-9c25a91bd99c" maxFailedRecords="-1">
+			<batch:process-records >
+				<batch:step name="ContactUpsert_BatchStep" doc:id="c3e27c02-d13c-4327-adb8-8bd6dd0ba4e0" >
+					<ee:transform doc:name="ContactPayload" doc:id="223ad175-f6dd-4954-91eb-27d8ac6b2013" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	SFDC_A_Contact_Id__c: payload.Id,
+	Email: payload.Email,
+	FirstName: payload.FirstName,
+	LastName: payload.LastName,
+	Phone: payload.Phone
+}]]]></ee:set-payload>
+						</ee:message>
+						<ee:variables >
+							<ee:set-variable variableName="actualPayload" ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-variable>
+						</ee:variables>
+					</ee:transform>
+					<ee:transform doc:name="FieldsToNull Logic" doc:id="873b293c-a02d-4dda-8b76-4c83d2b0e672" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+import * from dw::core::Objects
+---
+payload map {
+	Id: vars.actualPayload.SFDC_B_Contact_Id__c,
+	SFDC_A_Contact_Id__c: payload.SFDC_A_Contact_Id__c,
+	Email: payload.Email,
+	FirstName: payload.FirstName,
+	LastName: payload.LastName,
+	Phone: payload.Phone,
+	(fieldsToNull: valueSet($ mapObject (( key: $$ ) if(($ == null) or (isEmpty($)))  )))
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<salesforce:upsert doc:name="UpsertContacts InsfdcB" doc:id="83880610-7b92-412a-8bf4-fba6f1597b15" config-ref="Salesforce_Config_sfdcB" objectType="Contact" externalIdFieldName='#[if(vars.actualPayload.SFDC_B_Contact_Id__c == null) "SFDC_A_Contact_Id__c" else "Id"]' target="sfdcBOutput"/>
+					<choice doc:name="External Id?" doc:id="5c89911a-f447-4136-b33c-8bc88678cdc9" >
+						<when expression="#[vars.actualPayload.SFDC_B_Contact_Id__c == null]">
+							<ee:transform doc:name="ExternalId UpdatePayload" doc:id="538ab24e-cc12-46b6-a49a-ea532790c58c">
+								<ee:message>
+									<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	Id: vars.actualPayload.Id,
+	SFDC_B_Contact_Id__c: vars.sfdcBOutput.items[0].id
+}]]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+							<salesforce:update doc:name="UpdatesfdcB ContactIdInsfdcA" doc:id="33cd0389-e090-41ec-9902-88be69d46df6" config-ref="Salesforce_Config_sfdcA" type="Contact"/>
+							<ee:transform doc:name="LogPayload" doc:id="9ea6a8c1-b579-409f-b5e8-3d4974671ad4" >
+								<ee:message >
+									<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+if(payload.items.id[0] != null and vars.sfdcBOutput.items.id[0] != null)
+({
+	"Status" : "Contact Successfully Created in SFDC-B from SFDC-A and Updated External Id in SFDC-A",
+	"SFDC-A Contact Id" : vars.actualPayload.Id,
+	"SFDC-B Contact Id" : vars.sfdcBOutput.items[0].id default vars.actualPayload.SFDC_B_Contact_Id__c
+}) else if(vars.sfdcBOutput.items.id[0] != null)
+({
+	"Status" : "Contact Successfully Created in SFDC-B from SFDC-A, but Failed to Update External Id in SFDC-A",
+	"SFDC-A Contact Id" : vars.actualPayload.Id,
+	"SFDC-B Contact Id" : if(vars.actualPayload.SFDC_B_Contact_Id__c != null) vars.actualPayload.SFDC_B_Contact_Id__c else "There is no Contact Exist in SFDC-B",
+	"Error" : if(payload.items.exception.message != null) payload.items.exception.message else payload.items.exception.cause
+}) else
+({
+	"Status" : "Failed to Create Contact in SFDC-B from SFDC-A",
+	"SFDC-A Contact Id" : vars.actualPayload.Id,
+	"SFDC-B Contact Id" : if(vars.actualPayload.SFDC_B_Contact_Id__c != null) vars.actualPayload.SFDC_B_Contact_Id__c else "There is no Contact Exist in SFDC-B",
+	"Error" : if(vars.sfdcBOutput.items.exception.message != null) vars.sfdcBOutput.items.exception.message else vars.sfdcBOutput.items.exception.cause
+})]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+						</when>
+						<otherwise >
+							<ee:transform doc:name="LogPayload" doc:id="d8f460cb-a9b5-4057-ab4c-b14bddce3f72" >
+								<ee:message >
+									<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+if(vars.sfdcBOutput.items.id[0] != null)
+({
+	"Status" : if(vars.sfdcBOutput.items[0].successful == true) "Contact Successfully Updated in SFDC-B from SFDC-A" else "Failed to Update Contact in SFDC-B from SFDC-A",
+	"SFDC-A Contact Id" : vars.actualPayload.Id,
+	"SFDC-B Contact Id" : vars.sfdcBOutput.items.id[0] default vars.actualPayload.SFDC_B_Contact_Id__c,
+	
+}) else
+({
+	"Status" : "Failed to Create/Update Contact in SFDC-A from SFDC-B",
+	"SFDC-A Contact Id" : vars.actualPayload.Id,
+	"SFDC-B Contact Id" : vars.actualPayload.SFDC_B_Contact_Id__c,
+	"Error" : if(vars.sfdcBOutput.items[0].exception.message != null) vars.sfdcBOutput.items[0].exception.message else vars.sfdcBOutput.items[0].exception.cause
+})]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+						</otherwise>
+					</choice>
+					<logger level="INFO" doc:name="Step1_Logger" doc:id="e3ed6639-b850-4024-a37e-8bf71e8c7059" message="#[payload]"/>
+				</batch:step>
+				<batch:step name="FailedRecords_BatchStep" doc:id="507a404b-d35d-4d37-9bef-6fd4d6c2dc87" acceptPolicy="ONLY_FAILURES">
+					<ee:transform doc:name="ErrorLogPayload" doc:id="b06f75df-2885-462e-99bc-daa2aee69159" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"Status"            : "Failed to create/update the Contact in SFDC-B from SFDC-A",
+	"SFDC-A Id"			: payload.Id,
+	"SFDC-B Id"			: payload.SFDC_B_Contact_Id__c default "There is no Contact Exist in SFDC-B",
+	"Error Type"        : ((vars.'_mule_batch_INTERNAL_record'.stepExceptions..errorType map ($.namespace default "" ++ ":" ++ $.identifier default "")) distinctBy $) default null,
+	"ErrorMessage"      : if(vars.'_mule_batch_INTERNAL_record'.stepExceptions != null) vars.'_mule_batch_INTERNAL_record'.stepExceptions..message map $ distinctBy $ else null,
+	"InputPayload"      : payload
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="INFO" doc:name="FailedStep Logger" doc:id="22919a53-f1ee-4c19-8da6-b4ca091a9f15" message="#['Failure: ' ++  write(payload, 'application/json', {'indent': 'false'})]"/>
+				</batch:step>
+			</batch:process-records>
+		</batch:job>
+		<error-handler ref="errorHandlingError_Handler" />
+	</flow>
+	
+	<flow name="sfdcB_To_sfdcA_Contacts_businessLogicFlow" doc:id="9945b619-63dc-4149-8e32-b8efdbdfe9d3" >
+		<batch:job jobName="sfdcB_To_sfdcA_Contacts_businessLogicBatch_Job" doc:id="793fa501-a5f5-4491-836f-16d985d8804e" maxFailedRecords="-1">
+			<batch:process-records >
+				<batch:step name="ContactUpsert_BatchStep" doc:id="1389ca62-e7c7-4fdc-a44c-010bf78c56e6" >
+					<ee:transform doc:name="ContactPayload" doc:id="8c692c8e-e900-4b73-a391-4bd16a3d990c" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	SFDC_B_Contact_Id__c: payload.Id,
+	Email: payload.Email,
+	FirstName: payload.FirstName,
+	LastName: payload.LastName,
+	Phone: payload.Phone
+}]]]></ee:set-payload>
+						</ee:message>
+						<ee:variables >
+							<ee:set-variable variableName="actualPayload" ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-variable>
+						</ee:variables>
+					</ee:transform>
+					<ee:transform doc:name="FieldsToNull Logic" doc:id="83dfa6b4-b05a-4389-a724-cbb86e7326cb" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+import * from dw::core::Objects
+---
+payload map {
+	Id: vars.actualPayload.SFDC_A_Contact_Id__c,
+	SFDC_B_Contact_Id__c: payload.SFDC_B_Contact_Id__c,
+	Email: payload.Email,
+	FirstName: payload.FirstName,
+	LastName: payload.LastName,
+	Phone: payload.Phone,
+	(fieldsToNull: valueSet($ mapObject (( key: $$ ) if(($ == null) or (isEmpty($)))  )))
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<salesforce:upsert doc:name="UpsertContacts InsfdcA" doc:id="f23b934a-fd51-481a-a24b-393ea5c821d1" config-ref="Salesforce_Config_sfdcA" objectType="Contact" externalIdFieldName='#[if(vars.actualPayload.SFDC_A_Contact_Id__c == null) "SFDC_B_Contact_Id__c" else "Id"]' target="sfdcAOutput"/>
+					<choice doc:name="External Id?" doc:id="bb05dbc3-d8ef-4d4c-ab1b-074ff0b0f0b7" >
+						<when expression="#[vars.actualPayload.SFDC_A_Contact_Id__c == null]">
+							<ee:transform doc:name="ExternalId UpdatePayload" doc:id="1e6d314b-a31a-4fa1-bcf6-021bf274d981">
+								<ee:message>
+									<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	Id: vars.actualPayload.Id,
+	SFDC_A_Contact_Id__c: vars.sfdcAOutput.items[0].id
+}]]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+							<salesforce:update doc:name="UpdatesfdcA ContactIdInsfdcB" doc:id="dc18f792-0e44-4513-82d9-7481274d85e9" config-ref="Salesforce_Config_sfdcB" type="Contact"/>
+							<ee:transform doc:name="LogPayload" doc:id="eb6f59fa-3c57-4de3-a110-4197a5a2355a" >
+								<ee:message >
+									<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+if(payload.items.id[0] != null and vars.sfdcAOutput.items.id[0] != null)
+({
+	"Status" : "Contact Successfully Created in SFDC-A from SFDC-B and Updated External Id in SFDC-B",
+	"SFDC-B Contact Id" : vars.actualPayload.Id,
+	"SFDC-A Contact Id" : vars.sfdcAOutput.items[0].id default vars.actualPayload.SFDC_A_Contact_Id__c
+}) else if(vars.sfdcAOutput.items.id[0] != null)
+({
+	"Status" : "Contact Successfully Created in SFDC-A from SFDC-B, but Failed to Update External Id in SFDC-B",
+	"SFDC-B Contact Id" : vars.actualPayload.Id,
+	"SFDC-A Contact Id" : if(vars.actualPayload.SFDC_A_Contact_Id__c != null) vars.actualPayload.SFDC_A_Contact_Id__c else "There is no Contact Exist in SFDC-A",
+	"Error" : if(payload.items.exception.message != null) payload.items.exception.message else payload.items.exception.cause
+}) else
+({
+	"Status" : "Failed to Create Contact in SFDC-A from SFDC-B",
+	"SFDC-B Contact Id" : vars.actualPayload.Id,
+	"SFDC-A Contact Id" : if(vars.actualPayload.SFDC_A_Contact_Id__c != null) vars.actualPayload.SFDC_A_Contact_Id__c else "There is no Contact Exist in SFDC-A",
+	"Error" : if(vars.sfdcAOutput.items.exception.message != null) vars.sfdcAOutput.items.exception.message else vars.sfdcAOutput.items.exception.cause
+})]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+						</when>
+						<otherwise >
+							<ee:transform doc:name="LogPayload" doc:id="752065cb-a310-4288-b3e3-5e590a5d99c4" >
+								<ee:message >
+									<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+if(vars.sfdcAOutput.items.id[0] != null)
+({
+	"Status" : if(vars.sfdcAOutput.items[0].successful == true) "Contact Successfully Updated in SFDC-A from SFDC-B" else "Failed to Update Contact in SFDC-A from SFDC-B",
+	"SFDC-B Contact Id" : vars.actualPayload.Id,
+	"SFDC-A Contact Id" : vars.sfdcAOutput.items.id[0] default vars.actualPayload.SFDC_A_Contact_Id__c,
+	
+}) else
+({
+	"Status" : "Failed to Create/Update Contact in SFDC-A from SFDC-B",
+	"SFDC-B Contact Id" : vars.actualPayload.Id,
+	"SFDC-A Contact Id" : vars.actualPayload.SFDC_A_Contact_Id__c,
+	"Error" : if(vars.sfdcAOutput.items[0].exception.message != null) vars.sfdcAOutput.items[0].exception.message else vars.sfdcAOutput.items[0].exception.cause
+})]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+						</otherwise>
+					</choice>
+					<logger level="INFO" doc:name="Step1_Logger" doc:id="5c55e84b-16ea-4b5e-88ab-86d7dad8d624" message="#[payload]"/>
+				</batch:step>
+				<batch:step name="FailedRecords_BatchStep" doc:id="71941b41-2ee4-4497-8e5e-82dc054cd58a" acceptPolicy="ONLY_FAILURES">
+					<ee:transform doc:name="ErrorLogPayload" doc:id="8b76f5a3-5dd7-4b4c-b6b0-26e10c6b7ef9" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"Status"            : "Failed to create/update the Contact in SFDC-A from SFDC-B",
+	"SFDC-B Id"			: payload.Id,
+	"SFDC-A Id"			: payload.SFDC_A_Contact_Id__c default "There is no Contact Exist in SFDC-A",
+	"Error Type"        : ((vars.'_mule_batch_INTERNAL_record'.stepExceptions..errorType map ($.namespace default "" ++ ":" ++ $.identifier default "")) distinctBy $) default null,
+	"ErrorMessage"      : if(vars.'_mule_batch_INTERNAL_record'.stepExceptions != null) vars.'_mule_batch_INTERNAL_record'.stepExceptions..message map $ distinctBy $ else null,
+	"InputPayload"      : payload
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="INFO" doc:name="FailedStep Logger" doc:id="0817d2f7-0d8a-4646-85b5-be5549e84024" message="#['Failure: ' ++  write(payload, 'application/json', {'indent': 'false'})]"/>
+				</batch:step>
+			</batch:process-records>
+		</batch:job>
+		<error-handler ref="errorHandlingError_Handler" />
+	</flow>
+</mule>

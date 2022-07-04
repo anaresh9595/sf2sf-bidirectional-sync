@@ -1,0 +1,45 @@
+# Properties to be used on the Development environment
+
+
+# Scheduler configuration
+scheduler:
+  timeZone: "UTC"
+  cronExpression:
+    contacts:
+      sfdcA: "0 0/5 * * * ?"
+      sfdcB: "30 0/5 * * * ?"
+    
+# Watermarking default last query timestamp e.g. 2021-08-17T07:13:42.000Z
+watermark:
+  default:
+    accounts: "2022-03-01T00:00:00.001Z"
+    contacts: "2021-12-01T00:00:00.001Z"
+    opportunities: "2021-12-01T00:00:00.001Z"
+    
+
+# Salesforce A Org properties
+sfdcA:
+  username: "naresh.ankam@techilaservices.com"
+  password: "![7k8bWUNz5d1+ARiJLREH/w==]"
+  securityToken: "![xNf/C9QNtXyV/nWeVS7pIFzGhxoVdDtqLrzVB5+krJI=]"
+  url: "https://login.salesforce.com/services/Soap/u/51.0"
+  integrationUserId: "0055g00000BO5JiAAL"
+  
+# Salesforce B Org properties
+sfdcB:
+  username: "naresh.ankam@techilaservices.com.sfdcb"
+  password: "![7k8bWUNz5d1+ARiJLREH/w==]"
+  securityToken: "![fWq1HmC3QoTPQNYLP4x3oEfF/TxGFCeyCWUVGTdkclE=]"
+  url: "https://login.salesforce.com/services/Soap/u/51.0"
+  integrationUserId: "0055i0000023ceSAAQ"
+  
+
+#Sync policy for Parent Object
+account:
+  sync:
+    policy: "syncAccount"
+
+#Batch Job aggregator size
+page:
+  size: "50"
+  

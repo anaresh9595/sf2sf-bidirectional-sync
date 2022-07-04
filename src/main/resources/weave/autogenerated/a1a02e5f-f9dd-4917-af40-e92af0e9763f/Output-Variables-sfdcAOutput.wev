@@ -1,0 +1,8 @@
+%dw 2.0
+
+type auto_a1a02e5f_f9dd_4917_af40_e92af0e9763f_Output_Variables_sfdcAOutput = Array<Contact>
+type Contact = {| Id?: String {"typeId": "Id"} |} {"label": "Contact",
+"typeId": "Contact"}
+
+
+

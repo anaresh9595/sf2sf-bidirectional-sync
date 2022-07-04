@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<error-handler name="errorHandlingError_Handler" doc:id="4c5930f4-ab77-4dcf-8d26-37b698343d4b" >
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="9041a392-4590-4b1e-9d82-60d3ade75d91" type="OS:INVALID_KEY, OS:KEY_ALREADY_EXISTS, OS:KEY_NOT_FOUND, OS:NULL_VALUE, OS:STORE_NOT_AVAILABLE">
+			<ee:transform doc:name="Transform Message" doc:id="fb0883e8-682e-4bf5-b49e-e965dddd77f3" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+{
+	Status: "An error occurred in Object Store",
+	Error_message: error.errorType,
+	Error_Description: error.description,
+	correlationId: vars.xCorrelationId	
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Logger" doc:id="ad752fe5-20af-406a-8532-1dc24aafe0c6" message="#[payload]"/>
+		</on-error-propagate>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="259bad91-17de-4585-978a-b4d52514bfe3" type="SALESFORCE:CONNECTIVITY, SALESFORCE:INVALID_INPUT, SALESFORCE:INVALID_RESPONSE, SALESFORCE:LIMIT_EXCEEDED, SALESFORCE:MUTUAL_AUTHENTICATION_FAILED, SALESFORCE:NOT_FOUND, SALESFORCE:RETRY_EXHAUSTED, SALESFORCE:TIMEOUT">
+			<ee:transform doc:name="Transform Message" doc:id="8b47c4e7-2ded-47b4-89ae-6d0f7cd14b6f" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+{
+	Status: "An error occurred in the Salesforce",
+	Error_message: error.errorType.namespace ++ ":" ++ error.errorType.identifier,
+	Error_Description: error.description,
+	correlationId: vars.xCorrelationId	
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Logger" doc:id="c9c1efbc-afa3-40ea-adec-970153ded8db" message="#[payload]"/>
+		</on-error-propagate>
+		
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="e2834c6b-ecea-4583-944a-97327afc19ba" type="ANY">
+			<ee:transform doc:name="Transform Message" doc:id="e428ef15-5cec-44f6-b338-d2b472b3759c" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+{
+	Status: "An error occurred",
+	Error_message: error.errorType.namespace ++ ":" ++ error.errorType.identifier,
+	Error_Description: error.description,
+	correlationId: vars.xCorrelationId	
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Logger" doc:id="5f643bc5-882c-402f-b35f-bfb1f2b9e38e" message="#[payload]"/>
+		</on-error-propagate>
+	</error-handler>
+</mule>

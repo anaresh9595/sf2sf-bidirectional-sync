@@ -1,0 +1,9 @@
+{
+  "minMuleVersion": "4.3.0",
+	"secureProperties": [
+		"secure::sfdcA.password",
+		"secure::sfdcA.securityToken",
+		"secure::sfdcB.password",
+		"secure::sfdcB.securityToken"
+	]
+}

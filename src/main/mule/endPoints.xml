@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	<flow name="sfdcA_to_sfdcB_Contacts_schedulerFlow" doc:id="b2af1d5d-bccc-470a-810c-bcf019a8f7b3" >
+		<scheduler doc:name="sfdcA_Contacts" doc:id="6587e69a-351d-4ca0-bf01-6858aa9c1497" >
+			<scheduling-strategy >
+				<cron expression="${scheduler.cronExpression.contacts.sfdcA}" />
+			</scheduling-strategy>
+		</scheduler>
+		<ee:transform doc:name="syncUptoDate Variable" doc:id="20764cf6-dfe7-4c8e-8bc8-bc79203d1257" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="syncUptoDate" ><![CDATA[%dw 2.0
+output application/java
+---
+(now() >> "UTC") as String {format: "yyyy-MM-dd'T'HH:mm:ss.SSS"} ++ "Z"]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="sfdcA_Contacts queryFlow" doc:id="614aba95-bd26-4e39-8e96-b2ce8614600a" name="sfdcA_Contacts_queryFlow"/>
+		<choice doc:name="NewUpdates?" doc:id="8be75e79-7735-4188-80d3-09fb90408b91" >
+			<when expression="#[sizeOf(payload) &gt; 0]">
+				<flow-ref doc:name="sfdcA_To_sfdcB Contacts businessLogic" doc:id="31a71691-64d3-4683-9c9a-876443a29125" name="sfdcA_To_sfdcB_Contacts_businessLogicFlow"/>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="NoUpdates" doc:id="6f4e4c7b-89da-43d5-b1b7-bd71db2559ed" message='***** "There are no new updates in Salesforce A Org Contacts" *****'/>
+			</otherwise>
+		</choice>
+		<error-handler ref="errorHandlingError_Handler" />
+	</flow>
+	<flow name="sfdcA_Contacts_queryFlow" doc:id="28d2773f-38cb-437a-b6a4-ed06b379b3a2" >
+		<os:retrieve doc:name="Retrieve lastModifiedDate" doc:id="29c3ab64-db01-4a64-abb1-ae3b07834768" objectStore="Object_store_sfdcA_Contacts" key="lastModifiedDate" target="lastModifiedDate">
+			<os:default-value ><![CDATA[#[p('watermark.default.contacts') default now()]]]></os:default-value>
+		</os:retrieve>
+		<salesforce:query doc:name="Query_sfdcA Contacts" doc:id="0f48a256-b6f6-4600-bd8b-886e3bf317b8" config-ref="Salesforce_Config_sfdcA">
+			<salesforce:salesforce-query ><![CDATA[SELECT Email,FirstName,Id,LastModifiedDate,LastName,Name,Phone,SFDC_B_Contact_Id__c FROM Contact WHERE LastModifiedDate > :lastModifiedDate AND LastModifiedById <> '${sfdcA.integrationUserId}' ORDER BY LastModifiedDate ASC LIMIT 2000]]></salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output applicaton/java
+---
+{
+	"lastModifiedDate" : vars.lastModifiedDate
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<flow-ref doc:name="sfdcB Availability" doc:id="1900abde-a5f9-4b99-8de4-6fa2a23c51cb" name="sfdcB_Availability" />
+		<os:store doc:name="Store lastModifiedDate" doc:id="0f37bcfd-dc90-4eec-8cb2-2b27e88ef067" key="lastModifiedDate" objectStore="Object_store_sfdcA_Contacts" failOnNullValue="false">
+			<os:value ><![CDATA[#[max(payload map $.LastModifiedDate) default vars.lastModifiedDate]]]></os:value>
+		</os:store>
+		<logger level="INFO" doc:name="sfdcA_Contacts TriggerLog" doc:id="592a670e-8805-4451-9c9a-43237cdb4ae7" message="**** Sync of SFDC-A to SFDC-B Contacts From(UTC)....#[vars.lastModifiedDate]....to....#[max(payload map $.LastModifiedDate) default vars.syncUptoDate] ****"/>
+		<error-handler ref="errorHandlingError_Handler" />
+	</flow>
+	<flow name="sfdcB_Availability" doc:id="ba8d2f26-dc9a-4924-8611-c8a445a1da36">
+		<salesforce:query doc:name="Checking sfdcB Availability" doc:id="b4c114fa-85fa-4dc3-8c6a-66da7f75ee8f" config-ref="Salesforce_Config_sfdcB" target="sfdcBOutput">
+			<salesforce:salesforce-query><![CDATA[SELECT Id FROM Contact LIMIT 1]]></salesforce:salesforce-query>
+		</salesforce:query>
+		<error-handler ref="errorHandlingError_Handler" />
+	</flow>
+	<flow name="sfdcB_to_sfdcA_Contacts_schedulerFlow" doc:id="506b37e9-c83f-4185-82d8-baff006fc419" >
+		<scheduler doc:name="sfdcB_Contacts" doc:id="19ff79c6-4f64-4396-bc69-b456c8f9366e" >
+			<scheduling-strategy >
+				<cron expression="${scheduler.cronExpression.contacts.sfdcB}" />
+			</scheduling-strategy>
+		</scheduler>
+		<ee:transform doc:name="syncUptoDate Variable" doc:id="a542f27f-26e0-4ed2-8eed-7e81f87d7d98" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="syncUptoDate" ><![CDATA[%dw 2.0
+output application/java
+---
+(now() >> "UTC") as String {format: "yyyy-MM-dd'T'HH:mm:ss.SSS"} ++ "Z"]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="sfdcB_Contacts queryFlow" doc:id="0dda0887-b172-42ca-9c3e-c47a29dc2bbc" name="sfdcB_Contacts_queryFlow"/>
+		<choice doc:name="NewUpdates?" doc:id="6c069c32-77f5-4a02-b422-1a77885d1ef3" >
+			<when expression="#[sizeOf(payload) &gt; 0]">
+				<flow-ref doc:name="sfdcB_To_sfdcA Contacts businessLogic" doc:id="c24ea20a-630d-4163-a258-49b43347c7b3" name="sfdcB_To_sfdcA_Contacts_businessLogicFlow"/>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="NoUpdates" doc:id="078080fc-8c19-4ab4-88d3-0c1b1e09921c" message='***** "There are no new updates in Salesforce B Org Contacts" *****'/>
+			</otherwise>
+		</choice>
+		<error-handler ref="errorHandlingError_Handler" />
+	</flow>
+	<flow name="sfdcB_Contacts_queryFlow" doc:id="a1a02e5f-f9dd-4917-af40-e92af0e9763f" >
+		<os:retrieve doc:name="Retrieve lastModifiedDate" doc:id="2c4e1f32-857b-4311-b6fc-872ed54eeccc" objectStore="Object_store_sfdcB_Contacts" key="lastModifiedDate" target="lastModifiedDate">
+			<os:default-value ><![CDATA[#[p('watermark.default.contacts') default now()]]]></os:default-value>
+		</os:retrieve>
+		<salesforce:query doc:name="Query_sfdcB Contacts" doc:id="8a4dca4e-ea54-4f7e-8d96-c76adcb3d1eb" config-ref="Salesforce_Config_sfdcB">
+			<salesforce:salesforce-query ><![CDATA[SELECT Email,FirstName,Id,LastModifiedDate,LastName,Name,Phone,SFDC_A_Contact_Id__c FROM Contact WHERE LastModifiedDate > :lastModifiedDate AND LastModifiedById <> '${sfdcB.integrationUserId}' ORDER BY LastModifiedDate ASC LIMIT 2000]]></salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output applicaton/java
+---
+{
+	"lastModifiedDate" : vars.lastModifiedDate
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<flow-ref doc:name="sfdcA Availability" doc:id="ccea2a69-78b3-4606-a713-8889e216780b" name="sfdcA_Availability" />
+		<os:store doc:name="Store lastModifiedDate" doc:id="7c2f2597-0d79-4be4-9dea-73273644c042" key="lastModifiedDate" objectStore="Object_store_sfdcB_Contacts" failOnNullValue="false">
+			<os:value ><![CDATA[#[max(payload map $.LastModifiedDate) default vars.lastModifiedDate]]]></os:value>
+		</os:store>
+		<logger level="INFO" doc:name="sfdcB_Contacts TriggerLog" doc:id="043765d0-a582-49b9-9ba2-ceb43932f598" message="**** Sync of SFDC-B to SFDC-A Contacts From(UTC)....#[vars.lastModifiedDate]....to....#[max(payload map $.LastModifiedDate) default vars.syncUptoDate] ****"/>
+		<error-handler ref="errorHandlingError_Handler" />
+	</flow>
+
+	<flow name="sfdcA_Availability" doc:id="adad1fa9-49a4-489d-8855-b815f92e2156">
+		<salesforce:query doc:name="Checking sfdcA Availability" doc:id="ade40bfc-2c76-41f1-a836-ad35f352a5bf" config-ref="Salesforce_Config_sfdcA" target="sfdcAOutput">
+			<salesforce:salesforce-query><![CDATA[SELECT Id FROM Contact LIMIT 1]]></salesforce:salesforce-query>
+		</salesforce:query>
+		<error-handler ref="errorHandlingError_Handler" />
+	</flow>
+</mule>
